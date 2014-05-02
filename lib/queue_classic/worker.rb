@@ -59,9 +59,12 @@ module QC
     # Calls Worker#work but after the current process is forked.
     # The parent process will wait on the child process to exit.
     def fork_and_work
+      QC.before_fork(self)
       cpid = fork {setup_child; work}
       log(:at => :fork, :pid => cpid)
       Process.wait(cpid)
+      QC.after_fork(self, cpid)
+      cpid
     end
 
     # Blocks on locking a job, and once a job is locked,

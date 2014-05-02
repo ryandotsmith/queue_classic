@@ -14,16 +14,21 @@ module QC
     def execute(stmt, *params)
       @mutex.synchronize do
         QC.log(:at => "exec_sql", :sql => stmt.inspect)
+        params = nil if params.empty?
         begin
-          params = nil if params.empty?
-          r = @connection.exec(stmt, params)
-          result = []
-          r.each {|t| result << t}
-          result.length > 1 ? result : result.pop
+          query_db(stmt, params)
         rescue PGError => e
-          QC.log(:error => e.inspect)
-          @connection.reset
-          raise
+          conn_error = !!/PG::UnableToSend/.match(e.inspect)
+          if conn_error
+            @connection = establish_new
+            begin
+              query_db(stmt, params)
+            rescue PGError => e
+              execute_error(e)
+            end
+          else
+            execute_error(e)
+          end
         end
       end
     end
@@ -102,5 +107,18 @@ module QC
       @db_url = URI.parse(url)
     end
 
+    protected
+    def query_db(stmt, params) 
+      r = @connection.exec(stmt, params)
+      result = []
+      r.each {|t| result << t}
+      result.length > 1 ? result : result.pop
+    end
+
+    def execute_error(e)
+      QC.log(:error => e.inspect)
+      @connection.reset
+      raise
+    end
   end
 end
